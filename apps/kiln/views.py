@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.db.models import Prefetch
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -8,9 +9,19 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
-from .forms import OpenCookRunForm, PhaseChangeForm, ResinLotForm, SoftPointProbeForm
+from .forms import (
+    HearthTempSampleForm,
+    OpenCookRunForm,
+    PhaseChangeForm,
+    ResinLotForm,
+    SoftPointProbeForm,
+)
 from .models import CookRun, FireHearth, ResinLot
-from .services.floor_rules import change_hearth_phase
+from .services.floor_rules import (
+    assert_can_sample,
+    change_hearth_phase,
+    temp_sample_status,
+)
 
 
 def _wants_htmx(request):
@@ -48,12 +59,15 @@ def _board_context():
 def _drawer_context(hearth):
     open_run = hearth.open_run()
     probes = []
+    temp_status = None
     if open_run:
         probes = list(open_run.probes.order_by("-sampledAt", "-id"))
+        temp_status = temp_sample_status(open_run)
     return {
         "hearth": hearth,
         "open_run": open_run,
         "probes": probes,
+        "temp_status": temp_status,
         "phase_form": PhaseChangeForm(hearth=hearth),
         "probe_form": SoftPointProbeForm() if open_run else None,
         "open_run_form": OpenCookRunForm(hearth=hearth) if open_run is None else None,
@@ -209,3 +223,69 @@ def resin_lot_feed(request):
 
     lots = ResinLot.objects.all()[:40]
     return render(request, "resin/feed.html", {"lots": lots, "form": form})
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def temp_sample_feed(request):
+    """灶温曲线采样：未收灶值守列表 + 升温相位登记采样。"""
+    if request.method == "POST":
+        run = (
+            CookRun.objects.select_related("hearth")
+            .filter(pk=request.POST.get("run_id"), closedAt__isnull=True)
+            .first()
+        )
+        if run is None:
+            messages.error(request, "该值守不存在或已收灶，无法登记灶温采样。")
+            return redirect("temp_sample_feed")
+        try:
+            assert_can_sample(run)
+        except ValidationError as exc:
+            messages.error(request, exc.messages[0])
+            return redirect("temp_sample_feed")
+
+        form = HearthTempSampleForm(request.POST, run=run)
+        if form.is_valid():
+            sample = form.save(commit=False)
+            sample.run = run
+            try:
+                sample.save()
+                messages.success(
+                    request, f"已登记灶温采样 #{sample.seq} · {sample.hearthTempC}℃"
+                )
+            except IntegrityError:
+                messages.error(
+                    request, f"序号 {sample.seq} 已存在：同值守采样序号须唯一。"
+                )
+        else:
+            for errs in form.errors.values():
+                for e in errs:
+                    messages.error(request, e)
+                break
+        return redirect("temp_sample_feed")
+
+    runs = (
+        CookRun.objects.filter(closedAt__isnull=True)
+        .select_related("hearth", "resinLot")
+        .prefetch_related("temp_samples")
+        .order_by("hearth__lane", "hearth__tag", "-openedAt", "-id")
+    )
+    rows = []
+    for run in runs:
+        can_sample = run.hearth.phase == FireHearth.PHASE_RAMPING
+        rows.append(
+            {
+                "run": run,
+                "samples": list(run.temp_samples.all()),
+                "status": temp_sample_status(run),
+                "can_sample": can_sample,
+                "form": (
+                    HearthTempSampleForm(
+                        run=run, initial={"recorderName": request.user.username}
+                    )
+                    if can_sample
+                    else None
+                ),
+            }
+        )
+    return render(request, "temp/feed.html", {"rows": rows})

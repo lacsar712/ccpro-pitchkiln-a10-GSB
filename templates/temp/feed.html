@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}灶温采样{% endblock %}
+{% block content %}
+<section class="feed-head">
+  <div>
+    <h1>灶温采样</h1>
+    <p class="board-sub">未收灶值守 · 灶温曲线 · 仅升温相位可登记</p>
+  </div>
+  <a class="back-link" href="{% url 'home' %}">← 回值守看板</a>
+</section>
+
+<p class="hint sample-rule">
+  改保温口径：同一值守须至少 4 个连续序号采样点（序号从 1 起），
+  且相邻采样时刻间隔（后一点时刻减前一点）均不少于 10 分钟。
+</p>
+
+<div class="sample-feed">
+  {% for row in rows %}
+  <section class="sample-card">
+    <header class="sample-head">
+      <span class="tag mono">{{ row.run.hearth.tag }}</span>
+      <span class="badge phase-{{ row.run.hearth.phase }}">{{ row.run.hearth.get_phase_display }}</span>
+      <span class="meta">来脂批 {{ row.run.resinLot.lotCode }}</span>
+      <span class="meta">开灶 {{ row.run.openedAt|date:"m-d H:i" }}</span>
+      <span class="meta">采样 {{ row.status.count }} 点</span>
+      {% if row.status.ok %}
+      <span class="verdict ok">达标 · 可改保温</span>
+      {% else %}
+      <span class="verdict no">未达标 · 暂不可改保温</span>
+      {% endif %}
+    </header>
+
+    <ol class="probe-timeline">
+      {% for s in row.samples %}
+      <li>
+        <span class="mono temp">#{{ s.seq }} {{ s.hearthTempC }}℃</span>
+        <span class="when">{{ s.sampledAt|date:"m-d H:i" }}</span>
+        <span class="who">{{ s.recorderName }}</span>
+      </li>
+      {% empty %}
+      <li class="empty">尚无采样点</li>
+      {% endfor %}
+    </ol>
+
+    {% if row.can_sample %}
+    <form method="post" action="{% url 'temp_sample_feed' %}" class="stack-form">
+      {% csrf_token %}
+      <input type="hidden" name="run_id" value="{{ row.run.pk }}">
+      {{ row.form.as_p }}
+      <button type="submit" class="btn-ember">写入采样</button>
+    </form>
+    {% else %}
+    <p class="hint">仅升温相位可登记灶温采样，当前相位已拒绝。</p>
+    {% endif %}
+  </section>
+  {% empty %}
+  <p class="board-empty">暂无未收灶值守</p>
+  {% endfor %}
+</div>
+{% endblock %}

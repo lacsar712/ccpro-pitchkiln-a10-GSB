@@ -1,3 +1,6 @@
+from decimal import Decimal
+
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -107,3 +110,39 @@ class SoftPointProbe(models.Model):
 
     def __str__(self):
         return f"{self.softPointC}℃ by {self.samplerName}"
+
+
+class HearthTempSample(models.Model):
+    """未收灶值守的灶温曲线采样点（仅升温相位可登记）。"""
+
+    run = models.ForeignKey(
+        CookRun,
+        on_delete=models.CASCADE,
+        related_name="temp_samples",
+        verbose_name="值守",
+    )
+    seq = models.PositiveIntegerField(
+        "采样序号",
+        validators=[MinValueValidator(1, message="采样序号须从 1 起")],
+    )
+    hearthTempC = models.DecimalField(
+        "灶温(℃)",
+        max_digits=6,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"), message="灶温须为正数")],
+    )
+    sampledAt = models.DateTimeField("采样时刻")
+    recorderName = models.CharField("记录人", max_length=80)
+
+    class Meta:
+        ordering = ["seq", "id"]
+        verbose_name = "灶温采样"
+        verbose_name_plural = "灶温采样"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "seq"], name="uniq_temp_sample_seq_per_run"
+            )
+        ]
+
+    def __str__(self):
+        return f"#{self.seq} {self.hearthTempC}℃ by {self.recorderName}"

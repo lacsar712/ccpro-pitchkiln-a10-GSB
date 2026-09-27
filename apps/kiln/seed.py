@@ -3,11 +3,11 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from .models import CookRun, FireHearth, ResinLot, SoftPointProbe
+from .models import CookRun, FireHearth, HearthTempSample, ResinLot, SoftPointProbe
 
 
 def ensure_seed_data():
-    """幂等种子：账号 + 来脂批 / 灶台 / 值守 / 探针。"""
+    """幂等种子：账号 + 来脂批 / 灶台 / 值守 / 探针 / 灶温采样。"""
     User = get_user_model()
 
     if not User.objects.filter(username="admin").exists():
@@ -103,6 +103,22 @@ def ensure_seed_data():
         sampledAt=now - timezone.timedelta(hours=1, minutes=20),
         softPointC=Decimal("108.00"),
         samplerName="值守阿坤",
+    )
+    # 升温灶（坳火-乙）两点灶温采样：间隔 15 分钟达标、点数不足 4，
+    # 用于演示「升温→保温」拦截。
+    HearthTempSample.objects.create(
+        run=run2,
+        seq=1,
+        hearthTempC=Decimal("486.50"),
+        sampledAt=now - timezone.timedelta(hours=3, minutes=30),
+        recorderName="值守阿坤",
+    )
+    HearthTempSample.objects.create(
+        run=run2,
+        seq=2,
+        hearthTempC=Decimal("512.00"),
+        sampledAt=now - timezone.timedelta(hours=3, minutes=15),
+        recorderName="值守阿坤",
     )
 
     run3 = CookRun.objects.create(

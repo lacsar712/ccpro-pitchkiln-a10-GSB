@@ -608,6 +608,41 @@ body {
 
 .back-link:hover { text-decoration: underline; }
 
+/* —— hearth temp samples —— */
+.sample-rule {
+  margin: 0 0 1rem;
+  max-width: 46rem;
+}
+
+.sample-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 46rem;
+}
+
+.sample-card {
+  background: #161310;
+  border: 1px solid #2e261f;
+  padding: 0.9rem 1rem;
+}
+
+.sample-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.sample-head .tag { font-weight: 700; font-size: 0.95rem; }
+.sample-head .meta { color: var(--steel); font-size: 0.78rem; }
+.sample-head .verdict { font-size: 0.78rem; font-weight: 700; }
+.sample-head .verdict.ok { color: var(--ok); }
+.sample-head .verdict.no { color: var(--drawing); }
+
+.sample-card .stack-form { margin-top: 0.7rem; }
+
 @media (max-width: 900px) {
   .ember-gate { grid-template-columns: 1fr; }
   .floor-grid { margin-right: 0; }
