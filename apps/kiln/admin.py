@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from .models import CookRun, FireHearth, ResinLot, SoftPointProbe
+from .models import (
+    CookRun,
+    FireHearth,
+    HearthTempSample,
+    ResinLot,
+    SoftPointProbe,
+)
 
 
 @admin.register(ResinLot)
@@ -34,3 +40,9 @@ class CookRunAdmin(admin.ModelAdmin):
 class SoftPointProbeAdmin(admin.ModelAdmin):
     list_display = ("id", "run", "sampledAt", "softPointC", "samplerName")
     search_fields = ("samplerName",)
+
+
+@admin.register(HearthTempSample)
+class HearthTempSampleAdmin(admin.ModelAdmin):
+    list_display = ("id", "run", "seqNo", "tempC", "sampledAt", "recorderName")
+    search_fields = ("recorderName",)

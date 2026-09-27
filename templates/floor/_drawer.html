@@ -28,6 +28,41 @@
   </section>
 
   <section class="drawer-block">
+    <h3>灶温曲线采样 <span class="sample-count">采样点数 {{ temp_sample_count }}</span></h3>
+    {% if temp_sample_count %}
+    <p class="hint {% if temp_ready %}ready{% else %}notready{% endif %}">
+      {% if temp_ready %}✓ {{ temp_reason }}{% else %}✗ {{ temp_reason }} 采样未达标，不能从升温改保温。{% endif %}
+    </p>
+    {% endif %}
+    <ol class="probe-timeline temp-timeline">
+      {% for s in temp_samples %}
+      <li>
+        <span class="seq">#{{ s.seqNo }}</span>
+        <span class="mono temp">{{ s.tempC }}℃</span>
+        <span class="when">{{ s.sampledAt|date:"m-d H:i" }}</span>
+        <span class="who">{{ s.recorderName }}</span>
+      </li>
+      {% empty %}
+      <li class="empty">尚无灶温采样 — 仅升温相位可采样</li>
+      {% endfor %}
+    </ol>
+    {% if temp_sample_form %}
+    <p class="hint">采样序号按当前值守自动从 1 连续编号；灶温须为正数。</p>
+    <form method="post" action="{% url 'add_temp_sample' hearth.pk %}"
+          class="stack-form"
+          hx-post="{% url 'add_temp_sample' hearth.pk %}"
+          hx-target="#hearth-drawer"
+          hx-swap="innerHTML">
+      {% csrf_token %}
+      {{ temp_sample_form.as_p }}
+      <button type="submit" class="btn-ember">写入灶温采样</button>
+    </form>
+    {% else %}
+    <p class="hint">仅「升温」相位的值守可登记灶温采样。</p>
+    {% endif %}
+  </section>
+
+  <section class="drawer-block">
     <h3>软化点探针时间线</h3>
     <ol class="probe-timeline">
       {% for p in probes %}
@@ -72,7 +107,10 @@
 
   <section class="drawer-block">
     <h3>切换相位</h3>
-    <p class="hint">进入「出胶」须当前值守至少一条探针 ≤95℃。</p>
+    <p class="hint">
+      进入「出胶」须当前值守至少一条探针 ≤95℃。<br>
+      从「升温」改「保温」须至少 4 个连续序号灶温采样，且相邻序号采样时刻间隔不少于 10 分钟（按采样时刻逐差，后一点减前一点）。
+    </p>
     <form method="post" action="{% url 'change_phase' hearth.pk %}"
           class="stack-form"
           hx-post="{% url 'change_phase' hearth.pk %}"

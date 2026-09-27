@@ -608,6 +608,58 @@ body {
 
 .back-link:hover { text-decoration: underline; }
 
+/* 班次条：今日灶温采样点数 */
+.strip-stat {
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.35rem 0;
+  border: 1px solid #3a3028;
+  background: var(--ash);
+}
+
+.strip-stat-key {
+  font-size: 0.7rem;
+  color: var(--steel);
+  font-weight: 700;
+}
+
+.strip-stat-num {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--cinder);
+  line-height: 1;
+}
+
+/* 抽屉：灶温曲线采样 */
+.sample-count {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--steel);
+  margin-left: 0.4rem;
+}
+
+.hint.ready { color: var(--ok); }
+.hint.notready { color: var(--drawing); }
+
+.temp-timeline li {
+  grid-template-columns: 2.6rem 4.5rem 1fr;
+  grid-template-rows: auto auto;
+}
+
+.temp-timeline .seq {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--ember);
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.temp-timeline .who { grid-column: 2 / -1; }
+.temp-timeline li.empty { display: block; }
+
 @media (max-width: 900px) {
   .ember-gate { grid-template-columns: 1fr; }
   .floor-grid { margin-right: 0; }

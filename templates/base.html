@@ -15,6 +15,10 @@
     <nav class="strip-nav">
       <a href="{% url 'home' %}" class="{% if request.resolver_match.url_name == 'home' %}on{% endif %}" title="值守看板">灶</a>
       <a href="{% url 'resin_lot_feed' %}" class="{% if request.resolver_match.url_name == 'resin_lot_feed' %}on{% endif %}" title="来脂批">脂</a>
+      <span class="strip-stat" title="今日灶温采样点数">
+        <span class="strip-stat-key">温</span>
+        <span class="strip-stat-num">{{ temp_sample_today }}</span>
+      </span>
     </nav>
     <div class="strip-foot">
       <span class="who">{{ user.username }}</span>

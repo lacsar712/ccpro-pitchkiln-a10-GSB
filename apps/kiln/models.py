@@ -1,3 +1,7 @@
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -107,3 +111,47 @@ class SoftPointProbe(models.Model):
 
     def __str__(self):
         return f"{self.softPointC}℃ by {self.samplerName}"
+
+
+class HearthTempSample(models.Model):
+    """升温相位的灶温曲线采样：同一值守内采样序号从 1 起且唯一。"""
+
+    run = models.ForeignKey(
+        CookRun,
+        on_delete=models.CASCADE,
+        related_name="temp_samples",
+        verbose_name="所属值守",
+    )
+    seqNo = models.PositiveIntegerField("采样序号")
+    tempC = models.DecimalField(
+        "灶温摄氏",
+        max_digits=6,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    sampledAt = models.DateTimeField("采样时刻")
+    recorderName = models.CharField("记录人", max_length=80)
+
+    class Meta:
+        ordering = ["seqNo"]
+        verbose_name = "灶温采样"
+        verbose_name_plural = "灶温采样"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "seqNo"],
+                name="uniq_temp_sample_seq_per_run",
+            ),
+        ]
+
+    def __str__(self):
+        return f"#{self.seqNo} {self.tempC}℃ @ {self.sampledAt:%m-%d %H:%M}"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.tempC is not None and self.tempC <= 0:
+            errors["tempC"] = "灶温摄氏须为正数。"
+        if self.seqNo is not None and self.seqNo < 1:
+            errors["seqNo"] = "采样序号从 1 起。"
+        if errors:
+            raise ValidationError(errors)

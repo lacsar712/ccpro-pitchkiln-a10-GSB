@@ -1,16 +1,27 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.db.models import Prefetch
+from django.db import transaction
+from django.db.models import Max, Prefetch
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
-from .forms import OpenCookRunForm, PhaseChangeForm, ResinLotForm, SoftPointProbeForm
-from .models import CookRun, FireHearth, ResinLot
-from .services.floor_rules import change_hearth_phase
+from .forms import (
+    HearthTempSampleForm,
+    OpenCookRunForm,
+    PhaseChangeForm,
+    ResinLotForm,
+    SoftPointProbeForm,
+)
+from .models import CookRun, FireHearth, HearthTempSample, ResinLot
+from .services.floor_rules import (
+    assert_can_sample_temp,
+    change_hearth_phase,
+    holding_temp_readiness,
+)
 
 
 def _wants_htmx(request):
@@ -23,7 +34,7 @@ def _hearths_for_board():
             "runs",
             queryset=CookRun.objects.filter(closedAt__isnull=True)
             .select_related("resinLot")
-            .prefetch_related("probes"),
+            .prefetch_related("probes", "temp_samples"),
             to_attr="open_runs_cache",
         )
     ).order_by("lane", "tag")
@@ -48,14 +59,28 @@ def _board_context():
 def _drawer_context(hearth):
     open_run = hearth.open_run()
     probes = []
+    temp_samples = []
+    temp_ready = None
+    temp_reason = ""
     if open_run:
         probes = list(open_run.probes.order_by("-sampledAt", "-id"))
+        temp_samples = list(open_run.temp_samples.order_by("-seqNo"))
+        temp_ready, temp_reason = holding_temp_readiness(open_run)
     return {
         "hearth": hearth,
         "open_run": open_run,
         "probes": probes,
+        "temp_samples": temp_samples,
+        "temp_sample_count": len(temp_samples),
+        "temp_ready": temp_ready,
+        "temp_reason": temp_reason,
         "phase_form": PhaseChangeForm(hearth=hearth),
         "probe_form": SoftPointProbeForm() if open_run else None,
+        "temp_sample_form": (
+            HearthTempSampleForm(hearth=hearth)
+            if open_run and hearth.phase == FireHearth.PHASE_RAMPING
+            else None
+        ),
         "open_run_form": OpenCookRunForm(hearth=hearth) if open_run is None else None,
     }
 
@@ -134,6 +159,43 @@ def add_probe(request, pk):
         messages.success(request, f"已登记探针 {probe.softPointC}℃")
     else:
         messages.error(request, "探针登记失败，请检查输入")
+
+    if _wants_htmx(request):
+        resp = render(request, "floor/_drawer.html", _drawer_context(hearth))
+        resp["HX-Trigger"] = "floor-refresh"
+        return resp
+    return redirect(f"/?hearth={pk}")
+
+
+@login_required
+@require_POST
+def add_temp_sample(request, pk):
+    hearth = get_object_or_404(FireHearth, pk=pk)
+    form = HearthTempSampleForm(request.POST, hearth=hearth)
+    if form.is_valid():
+        try:
+            with transaction.atomic():
+                # 锁住值守行后再取最大序号，序号在值守内从 1 起连续分配；
+                # (run, seqNo) 唯一约束兜底并发
+                locked_run = CookRun.objects.select_for_update().get(
+                    pk=form.open_run.pk
+                )
+                max_seq = HearthTempSample.objects.filter(run=locked_run).aggregate(
+                    m=Max("seqNo")
+                )["m"]
+                sample = form.save(commit=False)
+                sample.run = locked_run
+                sample.seqNo = (max_seq or 0) + 1
+                sample.full_clean()
+                sample.save()
+            messages.success(
+                request, f"已记录灶温采样 #{sample.seqNo}：{sample.tempC}℃"
+            )
+        except ValidationError as exc:
+            messages.error(request, exc.messages[0])
+    else:
+        errors = form.errors.get("__all__") or next(iter(form.errors.values()), None)
+        messages.error(request, errors[0] if errors else "灶温采样登记失败，请检查输入")
 
     if _wants_htmx(request):
         resp = render(request, "floor/_drawer.html", _drawer_context(hearth))
